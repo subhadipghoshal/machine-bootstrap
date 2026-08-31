@@ -1,0 +1,7 @@
+software/
+scripts/
+tests/
+docs/
+.github/
+AGENTS.md
+PLAN.md

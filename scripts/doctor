@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/machine-bootstrap"
+while (($#)); do
+  case "$1" in
+    --state) (($# >= 2)) || { printf '%s\n' "doctor: --state requires a directory" >&2; exit 1; }; state_dir="$2"; shift 2 ;;
+    -h|--help) printf '%s\n' "Usage: doctor [--state DIR]"; exit 0 ;;
+    *) printf 'doctor: unknown option: %s\n' "$1" >&2; exit 1 ;;
+  esac
+done
+
+[[ "$state_dir" != / && "$state_dir" != "$HOME" ]] || { printf '%s\n' "doctor: refusing unsafe state directory" >&2; exit 1; }
+printf 'state: %s\n' "$state_dir"
+if [[ -d "$state_dir/phases" ]]; then
+  for marker in "$state_dir"/phases/*.done; do
+    [[ -e "$marker" ]] || continue
+    printf 'phase: %s\n' "$(basename "$marker" .done)"
+  done
+else
+  printf '%s\n' "status: not initialized"
+fi
+printf '%s\n' "manual: approve macOS security permissions only after testing the owning application"

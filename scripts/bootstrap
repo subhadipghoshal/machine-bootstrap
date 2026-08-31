@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+readonly DEFAULT_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/machine-bootstrap"
+readonly PHASES=(preflight command-line-tools homebrew retrieve-source chezmoi-preview core-packages apply-prerequisites chezmoi-apply optional-profiles doctor)
+
+mode="dry-run"
+state_dir="$DEFAULT_STATE"
+source_ref=""
+source_url="https://github.com/subhadipghoshal/dotfiles.git"
+stop_after=""
+
+usage() {
+  printf '%s\n' "Usage: bootstrap [--execute|--sandbox] [--state DIR] [--ref COMMIT_ID] [--stop-after PHASE]"
+}
+
+die() { printf 'bootstrap: %s\n' "$*" >&2; exit 1; }
+phase_done() { [[ -f "$state_dir/phases/$1.done" ]]; }
+run() { if [[ "$mode" == sandbox ]]; then printf 'sandbox: %s\n' "$*"; elif [[ "$mode" == dry-run ]]; then printf 'would run: %s\n' "$*"; else "$@"; fi; }
+mark_phase() {
+  [[ "$mode" != dry-run ]] || return 0
+  local phase="$1"; local tmp="$state_dir/phases/.${phase}.tmp"
+  printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$tmp"
+  mv "$tmp" "$state_dir/phases/$phase.done"
+}
+run_homebrew() {
+  if command -v brew >/dev/null 2>&1; then
+    run brew --version
+    return
+  fi
+  [[ "$mode" == execute ]] || { printf '%s\n' "would install native Homebrew after explicit approval"; return; }
+  [[ "$(uname -m)" == arm64 ]] || die "Homebrew installation requires arm64"
+  die "Homebrew is absent; install it from the reviewed vendor instructions, then rerun"
+}
+
+while (($#)); do
+  case "$1" in
+    --execute) mode="execute"; shift ;;
+    --sandbox) mode="sandbox"; shift ;;
+    --state) (($# >= 2)) || die "--state requires a directory"; state_dir="$2"; shift 2 ;;
+    --ref) (($# >= 2)) || die "--ref requires an immutable tag or commit"; source_ref="$2"; shift 2 ;;
+    --stop-after) (($# >= 2)) || die "--stop-after requires a phase"; stop_after="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown option: $1" ;;
+  esac
+done
+
+if [[ "$mode" != sandbox ]]; then
+  [[ "$(id -u)" -ne 0 ]] || die "do not run as root"
+  [[ "$(uname -s)" == Darwin ]] || die "supported host is Apple Silicon macOS"
+  [[ "$(uname -m)" == arm64 ]] || die "supported architecture is arm64"
+  [[ "$source_ref" =~ ^[0-9a-fA-F]{40}$ ]] || die "--ref must be a reviewed 40-character commit ID"
+fi
+
+if [[ "$mode" != dry-run ]]; then
+  [[ "$state_dir" != / && "$state_dir" != "$HOME" ]] || die "refusing unsafe state directory"
+  umask 077
+  mkdir -p "$state_dir/phases"
+  chmod 700 "$state_dir" "$state_dir/phases"
+fi
+
+for phase in "${PHASES[@]}"; do
+  if phase_done "$phase"; then
+    printf 'skip: %s (already complete)\n' "$phase"
+    continue
+  fi
+  case "$phase" in
+    preflight)
+      if [[ "$mode" != sandbox ]]; then
+        [[ -x /usr/bin/sw_vers ]] || die "sw_vers is required"
+        major="$(/usr/bin/sw_vers -productVersion | cut -d. -f1)"
+        [[ "$major" == "26" ]] || die "unsupported or untested macOS major: $major"
+        free_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
+        [[ "$free_kb" -gt 10485760 ]] || die "at least 10 GiB must be free"
+      fi
+      printf '%s\n' "preflight: supported host checks passed"
+      ;;
+    command-line-tools) if [[ "$mode" == sandbox ]]; then run xcode-select --install; elif xcode-select -p >/dev/null 2>&1; then printf '%s\n' "Command Line Tools already installed"; else xcode-select --install; die "finish Command Line Tools installation, then rerun"; fi ;;
+    homebrew) run_homebrew ;;
+    retrieve-source)
+      if [[ "$mode" == sandbox || "$mode" == dry-run ]]; then
+        run git clone --filter=blob:none --no-checkout "$source_url" "$state_dir/source"
+        run git -C "$state_dir/source" checkout --detach "$source_ref"
+      elif [[ -d "$state_dir/source/.git" ]]; then
+        git -C "$state_dir/source" fetch --filter=blob:none origin "$source_ref"
+        git -C "$state_dir/source" checkout --detach "$source_ref"
+      else
+        tmp_source="$state_dir/.source.tmp"
+        rm -rf "$tmp_source"
+        git clone --filter=blob:none --no-checkout "$source_url" "$tmp_source"
+        git -C "$tmp_source" checkout --detach "$source_ref"
+        mv "$tmp_source" "$state_dir/source"
+      fi
+      ;;
+    chezmoi-preview) run chezmoi init --source "$state_dir/source" --no-apply; run chezmoi diff ;;
+    core-packages) run brew bundle --file "$REPO_ROOT/software/homebrew/Brewfile.core" ;;
+    apply-prerequisites) printf '%s\n' "apply prerequisites: reviewed shell/plugin dependencies only" ;;
+    chezmoi-apply) run chezmoi apply --source "$state_dir/source" ;;
+    optional-profiles) printf '%s\n' "optional profiles are opt-in; no profile selected" ;;
+    doctor) run "$SCRIPT_DIR/doctor" --state "$state_dir" ;;
+  esac
+  mark_phase "$phase"
+  [[ -z "$stop_after" || "$phase" != "$stop_after" ]] || { printf 'stopped after: %s\n' "$phase"; exit 0; }
+done
+printf '%s\n' "bootstrap complete; inspect doctor output and manual macOS permission steps"
