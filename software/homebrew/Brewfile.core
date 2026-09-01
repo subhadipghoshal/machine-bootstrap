@@ -1,4 +1,5 @@
 brew "bat"
+brew "atuin"
 brew "chezmoi"
 brew "direnv"
 brew "eza"

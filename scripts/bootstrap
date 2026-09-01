@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eEuo pipefail
 
 readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -15,14 +15,33 @@ oh_my_zsh_ref="a5ecff7560b2e26f612032c632a12c75a3048bd0"
 oh_my_zsh_dir="$HOME/.oh-my-zsh"
 oh_my_zsh_custom_dir="$oh_my_zsh_dir/custom"
 stop_after=""
+current_phase="bootstrap"
 
 usage() {
   printf '%s\n' "Usage: bootstrap [--execute|--sandbox] [--state DIR] [--stop-after PHASE]"
 }
 
-die() { printf 'bootstrap: %s\n' "$*" >&2; exit 1; }
+log_error() { printf 'ERROR bootstrap: %s\n' "$*" >&2; }
+die() { log_error "$*"; exit 1; }
+phase_error() { log_error "phase ${current_phase} failed"; }
+trap phase_error ERR
+log_phase_start() { printf 'INFO bootstrap: phase start: %s\n' "$1"; }
+log_phase_skip() { printf 'INFO bootstrap: phase skip: %s\n' "$1"; }
+log_phase_complete() { printf 'INFO bootstrap: phase complete: %s\n' "$1"; }
 phase_done() { [[ -f "$state_dir/phases/$1.done" ]]; }
-run() { if [[ "$mode" == sandbox ]]; then printf 'sandbox: %s\n' "$*"; elif [[ "$mode" == dry-run ]]; then printf 'would run: %s\n' "$*"; else "$@"; fi; }
+run() {
+  if [[ "$mode" == sandbox ]]; then
+    printf 'sandbox: %s\n' "$*"
+  elif [[ "$mode" == dry-run ]]; then
+    printf 'would run: %s\n' "$*"
+  elif "$@"; then
+    :
+  else
+    local status=$?
+    log_error "phase ${current_phase} failed (status ${status})"
+    exit "$status"
+  fi
+}
 mark_phase() {
   [[ "$mode" != dry-run ]] || return 0
   local phase="$1"; local marker="$state_dir/phases/$phase.done"; local tmp="$state_dir/phases/.${phase}.tmp"
@@ -104,6 +123,7 @@ if [[ "$mode" != dry-run ]]; then
 fi
 
 for phase in "${PHASES[@]}"; do
+  current_phase="$phase"
   if phase_done "$phase"; then
     if [[ "$phase" == retrieve-source || "$phase" == chezmoi-preview || "$phase" == chezmoi-apply ]]; then
       : # These phases refresh the latest source and its applied targets.
@@ -126,10 +146,11 @@ for phase in "${PHASES[@]}"; do
       validate_custom_oh_my_zsh_repo "https://github.com/zsh-users/zsh-autosuggestions.git" "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5" "$oh_my_zsh_custom_dir/plugins/zsh-autosuggestions"
       validate_custom_oh_my_zsh_repo "https://github.com/z-shell/F-Sy-H.git" "9a279bb574a4de3b37cc9b9e33712f88ef52079d" "$oh_my_zsh_custom_dir/plugins/F-Sy-H"
     fi
-    printf 'skip: %s (already complete)\n' "$phase"
+    log_phase_skip "$phase"
     continue
     fi
   fi
+  log_phase_start "$phase"
   case "$phase" in
     preflight)
       if [[ "$mode" != sandbox ]]; then
@@ -214,6 +235,7 @@ for phase in "${PHASES[@]}"; do
     doctor) run "$SCRIPT_DIR/doctor" --state "$state_dir" ;;
   esac
   mark_phase "$phase"
+  log_phase_complete "$phase"
   [[ -z "$stop_after" || "$phase" != "$stop_after" ]] || { printf 'stopped after: %s\n' "$phase"; exit 0; }
 done
 printf '%s\n' "bootstrap complete; inspect doctor output and manual macOS permission steps"

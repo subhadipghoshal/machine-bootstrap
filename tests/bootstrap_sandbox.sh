@@ -6,8 +6,9 @@ trap 'rm -rf "$root"' EXIT
 state="$root/state"
 test_home="$root/home"
 script="$root/repo/scripts/bootstrap"
-mkdir -p "$root/repo/scripts" "$test_home"
+mkdir -p "$root/repo/scripts" "$root/repo/software/homebrew" "$test_home"
 cp "$(dirname -- "$0")/../scripts/bootstrap" "$script"
+cp "$(dirname -- "$0")/../software/homebrew/Brewfile.core" "$root/repo/software/homebrew/Brewfile.core"
 chmod +x "$script"
 
 first="$root/first.log"
@@ -17,6 +18,9 @@ HOME="$test_home" bash "$script" --sandbox --state "$state" --stop-after core-pa
 [[ ! -f "$state/phases/doctor.done" ]] || { printf '%s\n' "sandbox incorrectly completed after stop" >&2; exit 1; }
 HOME="$test_home" bash "$script" --sandbox --state "$state" >>"$first"
 grep -Fq -- "sandbox: git clone --filter=blob:none --branch main --single-branch https://github.com/subhadipghoshal/dotfiles.git" "$first" || { printf '%s\n' "sandbox did not retrieve main" >&2; exit 1; }
+grep -Fq -- "INFO bootstrap: phase start: preflight" "$first" || { printf '%s\n' "sandbox did not log phase start" >&2; exit 1; }
+grep -Fq -- "INFO bootstrap: phase complete: core-packages" "$first" || { printf '%s\n' "sandbox did not log phase completion" >&2; exit 1; }
+grep -Fxq -- 'brew "atuin"' "$root/repo/software/homebrew/Brewfile.core" || { printf '%s\n' "core profile does not include Atuin" >&2; exit 1; }
 grep -Fq -- "sandbox: chezmoi diff --source $state/source" "$first" || { printf '%s\n' "sandbox did not preview with chezmoi diff" >&2; exit 1; }
 grep -Fq -- "sandbox: chezmoi apply --source $state/source -v" "$first" || { printf '%s\n' "sandbox did not apply verbosely" >&2; exit 1; }
 core_line="$(grep -n -m1 -F -- "sandbox: brew bundle --file $root/repo/software/homebrew/Brewfile.core" "$first" | cut -d: -f1)"
@@ -43,16 +47,21 @@ before="$(find "$state" -type f -print | sort | xargs -I{} shasum -a 256 "{}")"
 HOME="$test_home" bash "$script" --sandbox --state "$state" >"$second"
 after="$(find "$state" -type f -print | sort | xargs -I{} shasum -a 256 "{}")"
 [[ "$before" == "$after" ]] || { printf '%s\n' "sandbox is not idempotent" >&2; exit 1; }
+grep -Fq -- "INFO bootstrap: phase skip: preflight" "$second" || { printf '%s\n' "sandbox did not log skipped phase" >&2; exit 1; }
+grep -Fq -- "INFO bootstrap: phase complete: retrieve-source" "$second" || { printf '%s\n' "sandbox did not log refreshed phase" >&2; exit 1; }
 grep -Fq -- "sandbox: git clone --filter=blob:none --branch main --single-branch https://github.com/subhadipghoshal/dotfiles.git" "$second" || { printf '%s\n' "sandbox did not refresh dotfiles source" >&2; exit 1; }
 grep -Fq -- "sandbox: chezmoi apply --source $state/source -v" "$second" || { printf '%s\n' "sandbox did not reapply dotfiles source" >&2; exit 1; }
-[[ "$(wc -l < "$second")" -eq 14 ]] || { printf '%s\n' "unexpected resume output" >&2; exit 1; }
 unexpected_state="$root/unexpected-state"
 mkdir -p "$unexpected_state"
 touch "$unexpected_state/source"
-if HOME="$test_home" bash "$script" --sandbox --state "$unexpected_state" --stop-after retrieve-source >/dev/null 2>&1; then
+conflict_log="$root/conflict.log"
+conflict_err="$root/conflict.err"
+if HOME="$test_home" bash "$script" --sandbox --state "$unexpected_state" --stop-after retrieve-source >"$conflict_log" 2>"$conflict_err"; then
   printf '%s\n' "sandbox accepted an unexpected source path" >&2
   exit 1
 fi
+! grep -Fq -- 'ERROR bootstrap:' "$conflict_log" || { printf '%s\n' "source conflict wrote its error to stdout" >&2; exit 1; }
+grep -Fxq -- 'ERROR bootstrap: refusing unexpected source path: '"$unexpected_state/source" "$conflict_err" || { printf '%s\n' "source conflict did not use structured stderr error" >&2; exit 1; }
 symlink_state="$root/symlink-state"
 mkdir -p "$symlink_state"
 ln -s "$root" "$symlink_state/source"

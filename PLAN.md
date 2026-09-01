@@ -180,7 +180,7 @@ Homebrew profiles:
 
 | Profile              | Intended contents                                                                                                                                                          |
 |----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Core                 | Git, GitHub CLI, chezmoi, LastPass CLI, Ghostty, Neovim, tmux, GnuPG only while migration requires it, ripgrep, fd, fzf, bat, eza, jq, yq, direnv, zoxide, Meslo Nerd Font |
+| Core                 | Git, GitHub CLI, chezmoi, LastPass CLI, Ghostty, Neovim, tmux, GnuPG only while migration requires it, ripgrep, fd, fzf, bat, eza, jq, yq, direnv, zoxide, Atuin, Meslo Nerd Font |
 | Languages            | Selected runtime managers, compilers, build tools, package managers                                                                                                        |
 | Cloud and containers | Docker or Podman, kubectl, Helm, k9s, cloud CLIs, Vault, related validators                                                                                                |
 | AI                   | Selected agent CLIs and fast-moving third-party taps                                                                                                                       |

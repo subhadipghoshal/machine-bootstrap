@@ -37,6 +37,8 @@ bash scripts/bootstrap --sandbox --state /tmp/bootstrap-state
 bash scripts/bootstrap --execute
 ```
 
+The core profile includes Atuin for persistent local zsh history lookup. Its zsh initialization is guarded so staged setup and shells on machines without Atuin continue safely. Atuin synchronization remains disabled unless explicitly enabled; `Ctrl-R` is the expected history lookup entry point.
+
 After core packages, the `agents` phase installs Claude Code, OpenCode, Antigravity, Node, and Pi. It then installs Oh My Zsh and its reviewed Powerlevel10k theme plus external plugins from pinned HTTPS Git repositories. The OpenCode plugin files under `dot_config/opencode/plugins/` are part of the chezmoi source, checked during execution, previewed by `chezmoi diff`, and applied by `chezmoi apply -v`.
 
 Pinned custom repositories:
