@@ -4,11 +4,15 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 readonly DEFAULT_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/machine-bootstrap"
-readonly PHASES=(preflight command-line-tools homebrew retrieve-source chezmoi-preview core-packages apply-prerequisites chezmoi-apply optional-profiles doctor)
+readonly PHASES=(preflight command-line-tools homebrew retrieve-source chezmoi-preview core-packages agents oh-my-zsh oh-my-zsh-custom apply-prerequisites chezmoi-apply optional-profiles doctor)
 
 mode="dry-run"
 state_dir="$DEFAULT_STATE"
 source_url="https://github.com/subhadipghoshal/dotfiles.git"
+oh_my_zsh_url="https://github.com/ohmyzsh/ohmyzsh.git"
+oh_my_zsh_ref="a5ecff7560b2e26f612032c632a12c75a3048bd0"
+oh_my_zsh_dir="$HOME/.oh-my-zsh"
+oh_my_zsh_custom_dir="$oh_my_zsh_dir/custom"
 stop_after=""
 
 usage() {
@@ -32,6 +36,36 @@ run_homebrew() {
   [[ "$mode" == execute ]] || { printf '%s\n' "would install native Homebrew after explicit approval"; return; }
   [[ "$(uname -m)" == arm64 ]] || die "Homebrew installation requires arm64"
   die "Homebrew is absent; install it from the reviewed vendor instructions, then rerun"
+}
+validate_existing_oh_my_zsh() {
+  [[ ! -L "$oh_my_zsh_dir" && -d "$oh_my_zsh_dir/.git" ]] || die "refusing to overwrite non-owned $oh_my_zsh_dir"
+  [[ "$(git -C "$oh_my_zsh_dir" remote get-url origin 2>/dev/null)" == "$oh_my_zsh_url" ]] || die "refusing unexpected Oh My Zsh remote in $oh_my_zsh_dir"
+  [[ -z "$(git -C "$oh_my_zsh_dir" status --porcelain --untracked-files=all --ignored)" ]] || die "Oh My Zsh repository is dirty: $oh_my_zsh_dir"
+  [[ "$(git -C "$oh_my_zsh_dir" rev-parse HEAD)" == "$oh_my_zsh_ref" ]] || die "Oh My Zsh is not at the reviewed revision: $oh_my_zsh_ref"
+}
+install_oh_my_zsh_custom_repo() {
+  local url="$1" ref="$2" target="$3" tmp
+  if [[ -e "$target" || -L "$target" ]]; then
+    validate_custom_oh_my_zsh_repo "$url" "$ref" "$target"
+    printf 'already installed: %s\n' "$target"
+  elif [[ "$mode" == sandbox || "$mode" == dry-run ]]; then
+    run git clone --filter=blob:none --no-checkout "$url" "$target"
+    run git -C "$target" checkout --detach "$ref"
+  else
+    tmp="$(dirname "$target")/.$(basename "$target").tmp"
+    [[ ! -e "$tmp" && ! -L "$tmp" ]] || die "refusing to overwrite unexpected temporary path $tmp"
+    mkdir -p "$(dirname "$target")"
+    git clone --filter=blob:none --no-checkout "$url" "$tmp"
+    git -C "$tmp" checkout --detach "$ref"
+    mv "$tmp" "$target"
+  fi
+}
+validate_custom_oh_my_zsh_repo() {
+  local url="$1" ref="$2" target="$3"
+  [[ ! -L "$target" && -d "$target/.git" ]] || die "refusing to overwrite non-owned $target"
+  [[ "$(git -C "$target" remote get-url origin 2>/dev/null)" == "$url" ]] || die "refusing unexpected custom Oh My Zsh remote in $target"
+  [[ -z "$(git -C "$target" status --porcelain --untracked-files=all --ignored)" ]] || die "custom Oh My Zsh repository is dirty: $target"
+  [[ "$(git -C "$target" rev-parse HEAD)" == "$ref" ]] || die "custom Oh My Zsh repository is not at the reviewed revision: $ref"
 }
 
 while (($#)); do
@@ -60,6 +94,24 @@ fi
 
 for phase in "${PHASES[@]}"; do
   if phase_done "$phase"; then
+    if [[ "$phase" == oh-my-zsh && "$mode" == execute ]]; then
+      if [[ ! -e "$oh_my_zsh_dir" || -L "$oh_my_zsh_dir" ]]; then
+        rm -f "$state_dir/phases/$phase.done"
+        continue
+      fi
+      validate_existing_oh_my_zsh
+    fi
+    if [[ "$phase" == oh-my-zsh-custom && "$mode" == execute ]]; then
+      if [[ ! -d "$oh_my_zsh_custom_dir/themes/powerlevel10k" || ! -d "$oh_my_zsh_custom_dir/plugins/forgit" || ! -d "$oh_my_zsh_custom_dir/plugins/fzf-tab" || ! -d "$oh_my_zsh_custom_dir/plugins/zsh-autosuggestions" || ! -d "$oh_my_zsh_custom_dir/plugins/F-Sy-H" ]]; then
+        rm -f "$state_dir/phases/$phase.done"
+        continue
+      fi
+      validate_custom_oh_my_zsh_repo "https://github.com/romkatv/powerlevel10k.git" "3308262dfbd743b6e1d3956a2b5572f7a049d692" "$oh_my_zsh_custom_dir/themes/powerlevel10k"
+      validate_custom_oh_my_zsh_repo "https://github.com/wfxr/forgit.git" "3fe2a163343270b1b0e631bf35c12a7d98093464" "$oh_my_zsh_custom_dir/plugins/forgit"
+      validate_custom_oh_my_zsh_repo "https://github.com/Aloxaf/fzf-tab.git" "24105b15714bfec37989ed5c5b6e60f572253019" "$oh_my_zsh_custom_dir/plugins/fzf-tab"
+      validate_custom_oh_my_zsh_repo "https://github.com/zsh-users/zsh-autosuggestions.git" "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5" "$oh_my_zsh_custom_dir/plugins/zsh-autosuggestions"
+      validate_custom_oh_my_zsh_repo "https://github.com/z-shell/F-Sy-H.git" "9a279bb574a4de3b37cc9b9e33712f88ef52079d" "$oh_my_zsh_custom_dir/plugins/F-Sy-H"
+    fi
     printf 'skip: %s (already complete)\n' "$phase"
     continue
   fi
@@ -90,8 +142,47 @@ for phase in "${PHASES[@]}"; do
         mv "$tmp_source" "$state_dir/source"
       fi
       ;;
-    chezmoi-preview) run chezmoi diff --source "$state_dir/source" ;;
+    chezmoi-preview)
+      if [[ "$mode" == execute ]]; then
+        [[ -d "$state_dir/source/dot_config/opencode/plugins" ]] || die "OpenCode plugins are missing from the chezmoi source"
+      fi
+      run chezmoi diff --source "$state_dir/source"
+      ;;
     core-packages) run brew bundle --file "$REPO_ROOT/software/homebrew/Brewfile.core" ;;
+    agents)
+      run brew bundle --file "$REPO_ROOT/software/homebrew/Brewfile.agents"
+      if [[ "$mode" == execute ]]; then
+        node_npm="$(brew --prefix node)/bin/npm"
+        [[ -x "$node_npm" ]] || die "Homebrew Node npm is missing: $node_npm"
+        "$node_npm" install --global @earendil-works/pi-coding-agent
+        pi_bin="$(brew --prefix)/bin/pi"
+        [[ -x "$pi_bin" ]] || die "Pi was not installed by Homebrew Node: $pi_bin"
+      else
+        run npm install --global @earendil-works/pi-coding-agent
+      fi
+      ;;
+    oh-my-zsh)
+      if [[ -e "$oh_my_zsh_dir" || -L "$oh_my_zsh_dir" ]]; then
+        validate_existing_oh_my_zsh
+        printf '%s\n' "Oh My Zsh already installed"
+      elif [[ "$mode" == sandbox || "$mode" == dry-run ]]; then
+        run git clone --filter=blob:none --no-checkout "$oh_my_zsh_url" "$oh_my_zsh_dir"
+        run git -C "$oh_my_zsh_dir" checkout --detach "$oh_my_zsh_ref"
+      else
+        tmp_oh_my_zsh="$HOME/.oh-my-zsh.tmp"
+        [[ ! -e "$tmp_oh_my_zsh" && ! -L "$tmp_oh_my_zsh" ]] || die "refusing to overwrite unexpected temporary path $tmp_oh_my_zsh"
+        git clone --filter=blob:none --no-checkout "$oh_my_zsh_url" "$tmp_oh_my_zsh"
+        git -C "$tmp_oh_my_zsh" checkout --detach "$oh_my_zsh_ref"
+        mv "$tmp_oh_my_zsh" "$oh_my_zsh_dir"
+      fi
+      ;;
+    oh-my-zsh-custom)
+      install_oh_my_zsh_custom_repo "https://github.com/romkatv/powerlevel10k.git" "3308262dfbd743b6e1d3956a2b5572f7a049d692" "$oh_my_zsh_custom_dir/themes/powerlevel10k"
+      install_oh_my_zsh_custom_repo "https://github.com/wfxr/forgit.git" "3fe2a163343270b1b0e631bf35c12a7d98093464" "$oh_my_zsh_custom_dir/plugins/forgit"
+      install_oh_my_zsh_custom_repo "https://github.com/Aloxaf/fzf-tab.git" "24105b15714bfec37989ed5c5b6e60f572253019" "$oh_my_zsh_custom_dir/plugins/fzf-tab"
+      install_oh_my_zsh_custom_repo "https://github.com/zsh-users/zsh-autosuggestions.git" "85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5" "$oh_my_zsh_custom_dir/plugins/zsh-autosuggestions"
+      install_oh_my_zsh_custom_repo "https://github.com/z-shell/F-Sy-H.git" "9a279bb574a4de3b37cc9b9e33712f88ef52079d" "$oh_my_zsh_custom_dir/plugins/F-Sy-H"
+      ;;
     apply-prerequisites) printf '%s\n' "apply prerequisites: reviewed shell/plugin dependencies only" ;;
     chezmoi-apply) run chezmoi apply --source "$state_dir/source" -v ;;
     optional-profiles) printf '%s\n' "optional profiles are opt-in; no profile selected" ;;

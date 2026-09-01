@@ -37,7 +37,18 @@ bash scripts/bootstrap --sandbox --state /tmp/bootstrap-state
 bash scripts/bootstrap --execute
 ```
 
-The chezmoi phases first show `chezmoi diff`, then apply the changes with `chezmoi apply -v`.
+After core packages, the `agents` phase installs Claude Code, OpenCode, Antigravity, Node, and Pi. It then installs Oh My Zsh and its reviewed Powerlevel10k theme plus external plugins from pinned HTTPS Git repositories. The OpenCode plugin files under `dot_config/opencode/plugins/` are part of the chezmoi source, checked during execution, previewed by `chezmoi diff`, and applied by `chezmoi apply -v`.
+
+Pinned custom repositories:
+
+| Component           | Repository                      | Reviewed commit                            |
+|---------------------|---------------------------------|--------------------------------------------|
+| Oh My Zsh           | `ohmyzsh/ohmyzsh`               | `a5ecff7560b2e26f612032c632a12c75a3048bd0` |
+| Powerlevel10k       | `romkatv/powerlevel10k`         | `3308262dfbd743b6e1d3956a2b5572f7a049d692` |
+| forgit              | `wfxr/forgit`                   | `3fe2a163343270b1b0e631bf35c12a7d98093464` |
+| fzf-tab             | `Aloxaf/fzf-tab`                | `24105b15714bfec37989ed5c5b6e60f572253019` |
+| zsh-autosuggestions | `zsh-users/zsh-autosuggestions` | `85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5` |
+| F-Sy-H              | `z-shell/F-Sy-H`                | `9a279bb574a4de3b37cc9b9e33712f88ef52079d` |
 
 State is kept under a private mode-0700 directory and phase completion is recorded atomically. Interrupted runs resume from the last completed phase. Normal convergence never uninstalls packages or runs Homebrew cleanup.
 

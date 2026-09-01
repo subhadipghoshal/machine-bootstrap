@@ -1,0 +1,5 @@
+tap "anomalyco/tap"
+brew "anomalyco/tap/opencode"
+brew "node"
+cask "claude-code"
+cask "antigravity"

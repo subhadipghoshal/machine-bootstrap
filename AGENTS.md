@@ -17,7 +17,7 @@
 
 - Do not start normal bootstrap implementation until Phase 0 credential containment and source-freeze gates are satisfied. `PLAN.md` records that values from `~/.secrets/keys` reached local output; never read or print that file, and never place replacement values in Git, logs, process arguments, or shell history.
 - Implement phases in the order listed in `PLAN.md`. Never add destructive cleanup, package removal, credential revocation, or old-machine erasure before replacement behavior passes its corresponding exit gate.
-- Bootstrap order matters: preflight, Command Line Tools, native Homebrew, latest-main anonymous source retrieval, change preview, core packages, apply prerequisites, verbose chezmoi apply, optional profiles, then the read-only doctor.
+- Bootstrap order matters: preflight, Command Line Tools, native Homebrew, latest-main anonymous source retrieval, change preview, core packages, agents, Oh My Zsh and pinned custom plugins, apply prerequisites, verbose chezmoi apply, optional profiles, then the read-only doctor.
 - Bootstrap from the latest commit on `main`, retrieved over HTTPS and never piped directly into a shell.
 
 ## Behavioral Constraints

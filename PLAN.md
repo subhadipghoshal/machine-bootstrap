@@ -10,16 +10,16 @@
 
 The following decisions are fixed for the first implementation:
 
-| Decision | Choice |
-|---|---|
-| Migration model | Clean developer-environment rebuild, not Migration Assistant or an exact clone |
-| Supported hardware | Apple Silicon only |
-| Configuration authority | Public GitHub repository managed with chezmoi |
-| Project authority | Private Git remotes |
-| Secret authority | LastPass only |
-| Package behavior | Functional equivalence with current compatible packages, not byte-for-byte package reproduction |
-| Runtime behavior | Pin versions required by projects; do not preserve every globally installed runtime |
-| Local state | Restore only state explicitly classified as valuable |
+| Decision                | Choice                                                                                          |
+|-------------------------|-------------------------------------------------------------------------------------------------|
+| Migration model         | Clean developer-environment rebuild, not Migration Assistant or an exact clone                  |
+| Supported hardware      | Apple Silicon only                                                                              |
+| Configuration authority | Public GitHub repository managed with chezmoi                                                   |
+| Project authority       | Private Git remotes                                                                             |
+| Secret authority        | LastPass only                                                                                   |
+| Package behavior        | Functional equivalence with current compatible packages, not byte-for-byte package reproduction |
+| Runtime behavior        | Pin versions required by projects; do not preserve every globally installed runtime             |
+| Local state             | Restore only state explicitly classified as valuable                                            |
 
 The setup is complete when a clean Apple Silicon Mac can retrieve a reviewed release, install the selected developer tools, apply portable configuration, authenticate through LastPass, clone a private project, and build representative projects. Running the process a second time must produce no unexplained changes.
 
@@ -47,13 +47,13 @@ The implementation must account for these observed conditions:
 
 Each kind of state must have exactly one authority.
 
-| Authority | Owns | Must not own |
-|---|---|---|
-| Public dotfiles repository | Bootstrap, Brewfiles, runtime policy, non-secret dotfiles, editor manifests, validation, documentation | Credentials, private repository names when sensitive, application auth databases, histories |
-| Private project remotes | Source, branches, tags, project lockfiles, project runtime declarations, LFS objects, submodules | Global machine configuration |
-| LastPass | Passwords, API keys, recovery codes, durable developer credentials | Dotfiles, package manifests, project source |
-| Per-device authentication | SSH private keys, OAuth sessions, temporary credential caches | Durable cross-device recovery data |
-| Temporary encrypted migration snapshot | Unresolved repository bundles and explicitly selected local-only state | Ongoing configuration authority |
+| Authority                              | Owns                                                                                                   | Must not own                                                                                |
+|----------------------------------------|--------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| Public dotfiles repository             | Bootstrap, Brewfiles, runtime policy, non-secret dotfiles, editor manifests, validation, documentation | Credentials, private repository names when sensitive, application auth databases, histories |
+| Private project remotes                | Source, branches, tags, project lockfiles, project runtime declarations, LFS objects, submodules       | Global machine configuration                                                                |
+| LastPass                               | Passwords, API keys, recovery codes, durable developer credentials                                     | Dotfiles, package manifests, project source                                                 |
+| Per-device authentication              | SSH private keys, OAuth sessions, temporary credential caches                                          | Durable cross-device recovery data                                                          |
+| Temporary encrypted migration snapshot | Unresolved repository bundles and explicitly selected local-only state                                 | Ongoing configuration authority                                                             |
 
 GitHub is the rebuild source, not a complete backup. It stores pushed Git objects but cannot recover uncommitted files, ignored files, local databases, stashes not converted to refs, shell history, credentials, container volumes, or application state. A GitHub-only strategy becomes acceptable only after every valuable project and configuration change is pushed, every durable secret is in LastPass, and all remaining local state is explicitly disposable.
 
@@ -178,13 +178,13 @@ Exit gate:
 
 Homebrew profiles:
 
-| Profile | Intended contents |
-|---|---|
-| Core | Git, GitHub CLI, chezmoi, LastPass CLI, Ghostty, Neovim, tmux, GnuPG only while migration requires it, ripgrep, fd, fzf, bat, eza, jq, yq, direnv, zoxide, Meslo Nerd Font |
-| Languages | Selected runtime managers, compilers, build tools, package managers |
-| Cloud and containers | Docker or Podman, kubectl, Helm, k9s, cloud CLIs, Vault, related validators |
-| AI | Selected agent CLIs and fast-moving third-party taps |
-| GUI development | VS Code, Zed or other explicitly selected developer applications |
+| Profile              | Intended contents                                                                                                                                                          |
+|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Core                 | Git, GitHub CLI, chezmoi, LastPass CLI, Ghostty, Neovim, tmux, GnuPG only while migration requires it, ripgrep, fd, fzf, bat, eza, jq, yq, direnv, zoxide, Meslo Nerd Font |
+| Languages            | Selected runtime managers, compilers, build tools, package managers                                                                                                        |
+| Cloud and containers | Docker or Podman, kubectl, Helm, k9s, cloud CLIs, Vault, related validators                                                                                                |
+| AI                   | Selected agent CLIs and fast-moving third-party taps                                                                                                                       |
+| GUI development      | VS Code, Zed or other explicitly selected developer applications                                                                                                           |
 
 Implementation work:
 
@@ -202,15 +202,15 @@ Implementation work:
 
 Initial runtime ownership policy:
 
-| Runtime | Planned owner |
-|---|---|
-| Python | `uv` for Python installations and global tools |
-| Rust | `rustup` |
-| Go | `goenv` only if active projects require multiple versions |
-| Java | SDKMAN for project JDKs |
-| .NET | Homebrew |
-| Node | Decide between Homebrew Node and active NVM after project requirement audit |
-| Ruby | Remove rbenv from the desired setup unless an active project proves it is needed |
+| Runtime | Planned owner                                                                    |
+|---------|----------------------------------------------------------------------------------|
+| Python  | `uv` for Python installations and global tools                                   |
+| Rust    | `rustup`                                                                         |
+| Go      | `goenv` only if active projects require multiple versions                        |
+| Java    | SDKMAN for project JDKs                                                          |
+| .NET    | Homebrew                                                                         |
+| Node    | Decide between Homebrew Node and active NVM after project requirement audit      |
+| Ruby    | Remove rbenv from the desired setup unless an active project proves it is needed |
 
 Exit gate:
 
@@ -231,11 +231,13 @@ Bootstrap sequence:
 4. Retrieve the latest dotfiles commit from the public repository's `main` branch anonymously over HTTPS.
 5. Show the planned file changes with `chezmoi diff` without applying targets.
 6. Install the core Homebrew profile.
-7. Install pinned shell framework, theme, plugins, and other pre-apply dependencies.
-8. Apply chezmoi with verbose output.
-9. Install selected language and optional profiles.
-10. Install editor plugins and extensions from their manifests.
-11. Run the read-only doctor and present remaining manual steps.
+7. Install the coding agents profile: Claude Code, OpenCode, Node, Antigravity, and Pi.
+8. Install Oh My Zsh at a reviewed revision.
+9. Install the reviewed Powerlevel10k theme and external plugins from pinned repositories.
+10. Apply chezmoi with verbose output, including the managed OpenCode plugins.
+11. Install selected language and optional profiles.
+12. Install editor plugins and extensions from their manifests.
+13. Run the read-only doctor and present remaining manual steps.
 
 Bootstrap safety requirements:
 
@@ -382,16 +384,16 @@ Exit gate:
 
 Rollback must be designed before implementation begins.
 
-| Surface | Rollback method |
-|---|---|
-| Dotfiles | Check out the prior reviewed tag, preview chezmoi changes, then apply targeted files |
-| Existing target files | Restore private per-run backups with original type, mode, ownership, and symlink target |
-| Homebrew packages | Reinstall from the pre-migration inventory; do not promise exact historical bottles unless separately archived |
-| Runtimes | Reinstall versions from project manifests and retained runtime inventory |
-| Projects | Restore from verified private remotes or encrypted repository bundles |
-| macOS preferences | Restore only if the current value still equals the value installed by the bootstrap |
-| LaunchAgents | Unload only the exact managed label, restore prior files, validate, and reload only if previously active |
-| Secrets | Revoke the replacement only after the prior or next credential is confirmed usable |
+| Surface               | Rollback method                                                                                                |
+|-----------------------|----------------------------------------------------------------------------------------------------------------|
+| Dotfiles              | Check out the prior reviewed tag, preview chezmoi changes, then apply targeted files                           |
+| Existing target files | Restore private per-run backups with original type, mode, ownership, and symlink target                        |
+| Homebrew packages     | Reinstall from the pre-migration inventory; do not promise exact historical bottles unless separately archived |
+| Runtimes              | Reinstall versions from project manifests and retained runtime inventory                                       |
+| Projects              | Restore from verified private remotes or encrypted repository bundles                                          |
+| macOS preferences     | Restore only if the current value still equals the value installed by the bootstrap                            |
+| LaunchAgents          | Unload only the exact managed label, restore prior files, validate, and reload only if previously active       |
+| Secrets               | Revoke the replacement only after the prior or next credential is confirmed usable                             |
 
 Package removal, credential revocation, and old-Mac erasure must never be automatic rollback steps.
 
