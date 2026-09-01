@@ -24,18 +24,20 @@ bash -n scripts/bootstrap scripts/doctor tests/bootstrap_sandbox.sh
 
 ## Bootstrap Modes
 
-The script defaults to a non-mutating plan. A reviewed immutable 40-character commit ID is mandatory outside sandbox mode:
+The script defaults to a non-mutating plan and retrieves the latest commit from the dotfiles repository's `main` branch:
 
 ```sh
-bash scripts/bootstrap --ref REVIEWED_COMMIT_ID
-bash scripts/bootstrap --sandbox --state /tmp/bootstrap-state --ref REVIEWED_COMMIT_ID
+bash scripts/bootstrap
+bash scripts/bootstrap --sandbox --state /tmp/bootstrap-state
 ```
 
 `--execute` is intentionally explicit. It must be run only on a clean, supported Apple Silicon macOS account after the Phase 0 and relevant `PLAN.md` exit gates pass:
 
 ```sh
-bash scripts/bootstrap --execute --ref REVIEWED_COMMIT_ID
+bash scripts/bootstrap --execute
 ```
+
+The chezmoi phases first show `chezmoi diff`, then apply the changes with `chezmoi apply -v`.
 
 State is kept under a private mode-0700 directory and phase completion is recorded atomically. Interrupted runs resume from the last completed phase. Normal convergence never uninstalls packages or runs Homebrew cleanup.
 

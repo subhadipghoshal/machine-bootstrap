@@ -161,7 +161,7 @@ Implementation work:
 8. Separate stable portable settings from generated application state, identity, authentication, and local histories.
 9. Ensure agent harness adapters and skill links resolve without embedding source-machine paths.
 10. Make optional shell integrations tolerate absent tools during bootstrap.
-11. Replace the README's immediate `chezmoi init` and apply flow with the staged bootstrap process.
+11. Document the staged chezmoi diff and verbose apply flow in the README.
 12. Scan the complete public history, branches, tags, and generated artifacts before publishing the release.
 
 Exit gate:
@@ -228,15 +228,14 @@ Bootstrap sequence:
 1. Verify supported macOS, `arm64`, available disk space, network access, administrator capability, and conflicting existing targets.
 2. Detect Command Line Tools. If absent, request installation and stop with an explicit resume instruction.
 3. Install or verify native Apple Silicon Homebrew.
-4. Retrieve the public dotfiles repository anonymously over HTTPS at an immutable reviewed tag or commit.
-5. Initialize the chezmoi source without applying targets.
-6. Show the planned package and file changes.
-7. Install the core Homebrew profile.
-8. Install pinned shell framework, theme, plugins, and other pre-apply dependencies.
-9. Preview and apply chezmoi in small target groups.
-10. Install selected language and optional profiles.
-11. Install editor plugins and extensions from their manifests.
-12. Run the read-only doctor and present remaining manual steps.
+4. Retrieve the latest dotfiles commit from the public repository's `main` branch anonymously over HTTPS.
+5. Show the planned file changes with `chezmoi diff` without applying targets.
+6. Install the core Homebrew profile.
+7. Install pinned shell framework, theme, plugins, and other pre-apply dependencies.
+8. Apply chezmoi with verbose output.
+9. Install selected language and optional profiles.
+10. Install editor plugins and extensions from their manifests.
+11. Run the read-only doctor and present remaining manual steps.
 
 Bootstrap safety requirements:
 
@@ -398,7 +397,7 @@ Package removal, credential revocation, and old-Mac erasure must never be automa
 
 ## 7. Release and maintenance policy
 
-1. Bootstrap from immutable reviewed tags or commits, not the mutable default branch.
+1. Bootstrap from the latest commit on the dotfiles repository's `main` branch.
 2. Protect the GitHub account with strong MFA and retain independent account recovery material.
 3. Keep the public repository anonymous-cloneable so initial setup does not depend on SSH credentials.
 4. Test each supported macOS major release before claiming support.
