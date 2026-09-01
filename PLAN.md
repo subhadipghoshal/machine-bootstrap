@@ -229,8 +229,8 @@ Bootstrap sequence:
 2. Detect Command Line Tools. If absent, request installation and stop with an explicit resume instruction.
 3. Install or verify native Apple Silicon Homebrew.
 4. Retrieve the latest dotfiles commit from the public repository's `main` branch anonymously over HTTPS.
-5. Show the planned file changes with `chezmoi diff` without applying targets.
-6. Install the core Homebrew profile.
+5. Install the core Homebrew profile.
+6. Show the planned file changes with `chezmoi diff` without applying targets.
 7. Install the coding agents profile: Claude Code, OpenCode, Node, Antigravity, and Pi.
 8. Install Oh My Zsh at a reviewed revision.
 9. Install the reviewed Powerlevel10k theme and external plugins from pinned repositories.
@@ -251,7 +251,8 @@ Bootstrap safety requirements:
 - Verify actual state before trusting a completion marker.
 - Do not uninstall packages or run Homebrew cleanup during normal convergence.
 - Make interrupted phases safely resumable.
-- Make the second successful run a no-op apart from read-only checks.
+- Refresh the dotfiles source from `main`, preview it, and reapply it on each invocation so completed phase markers cannot hide source updates.
+- Make the second successful run produce no unexplained target changes apart from the intentional source refresh and read-only convergence checks.
 
 Exit gate:
 

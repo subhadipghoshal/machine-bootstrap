@@ -4,11 +4,12 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 readonly REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 readonly DEFAULT_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/machine-bootstrap"
-readonly PHASES=(preflight command-line-tools homebrew retrieve-source chezmoi-preview core-packages agents oh-my-zsh oh-my-zsh-custom apply-prerequisites chezmoi-apply optional-profiles doctor)
+readonly PHASES=(preflight command-line-tools homebrew retrieve-source core-packages chezmoi-preview agents oh-my-zsh oh-my-zsh-custom apply-prerequisites chezmoi-apply optional-profiles doctor)
 
 mode="dry-run"
 state_dir="$DEFAULT_STATE"
 source_url="https://github.com/subhadipghoshal/dotfiles.git"
+export GIT_TERMINAL_PROMPT=0
 oh_my_zsh_url="https://github.com/ohmyzsh/ohmyzsh.git"
 oh_my_zsh_ref="a5ecff7560b2e26f612032c632a12c75a3048bd0"
 oh_my_zsh_dir="$HOME/.oh-my-zsh"
@@ -24,9 +25,10 @@ phase_done() { [[ -f "$state_dir/phases/$1.done" ]]; }
 run() { if [[ "$mode" == sandbox ]]; then printf 'sandbox: %s\n' "$*"; elif [[ "$mode" == dry-run ]]; then printf 'would run: %s\n' "$*"; else "$@"; fi; }
 mark_phase() {
   [[ "$mode" != dry-run ]] || return 0
-  local phase="$1"; local tmp="$state_dir/phases/.${phase}.tmp"
+  local phase="$1"; local marker="$state_dir/phases/$phase.done"; local tmp="$state_dir/phases/.${phase}.tmp"
+  [[ ! -f "$marker" ]] || return 0
   printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$tmp"
-  mv "$tmp" "$state_dir/phases/$phase.done"
+  mv "$tmp" "$marker"
 }
 run_homebrew() {
   if command -v brew >/dev/null 2>&1; then
@@ -36,6 +38,15 @@ run_homebrew() {
   [[ "$mode" == execute ]] || { printf '%s\n' "would install native Homebrew after explicit approval"; return; }
   [[ "$(uname -m)" == arm64 ]] || die "Homebrew installation requires arm64"
   die "Homebrew is absent; install it from the reviewed vendor instructions, then rerun"
+}
+validate_source_repo() {
+  local target="$1"
+  [[ ! -L "$target" && -d "$target" ]] || die "refusing unexpected source path: $target"
+  [[ "$(stat -f '%u' "$target" 2>/dev/null)" == "$(id -u)" ]] || die "refusing source repository not owned by the current user: $target"
+  [[ ! -L "$target/.git" && -d "$target/.git" ]] || die "refusing non-owned source repository: $target"
+  git -C "$target" rev-parse --git-dir >/dev/null 2>&1 || die "refusing invalid source repository: $target"
+  [[ "$(git -C "$target" remote get-url origin 2>/dev/null)" == "$source_url" ]] || die "refusing unexpected source remote in $target"
+  [[ -z "$(git -C "$target" status --porcelain)" ]] || die "refusing dirty source repository: $target"
 }
 validate_existing_oh_my_zsh() {
   [[ ! -L "$oh_my_zsh_dir" && -d "$oh_my_zsh_dir/.git" ]] || die "refusing to overwrite non-owned $oh_my_zsh_dir"
@@ -94,6 +105,9 @@ fi
 
 for phase in "${PHASES[@]}"; do
   if phase_done "$phase"; then
+    if [[ "$phase" == retrieve-source || "$phase" == chezmoi-preview || "$phase" == chezmoi-apply ]]; then
+      : # These phases refresh the latest source and its applied targets.
+    else
     if [[ "$phase" == oh-my-zsh && "$mode" == execute ]]; then
       if [[ ! -e "$oh_my_zsh_dir" || -L "$oh_my_zsh_dir" ]]; then
         rm -f "$state_dir/phases/$phase.done"
@@ -114,6 +128,7 @@ for phase in "${PHASES[@]}"; do
     fi
     printf 'skip: %s (already complete)\n' "$phase"
     continue
+    fi
   fi
   case "$phase" in
     preflight)
@@ -129,17 +144,27 @@ for phase in "${PHASES[@]}"; do
     command-line-tools) if [[ "$mode" == sandbox ]]; then run xcode-select --install; elif xcode-select -p >/dev/null 2>&1; then printf '%s\n' "Command Line Tools already installed"; else xcode-select --install; die "finish Command Line Tools installation, then rerun"; fi ;;
     homebrew) run_homebrew ;;
     retrieve-source)
+      source_dir="$state_dir/source"
+      if [[ -e "$source_dir" || -L "$source_dir" ]]; then
+        validate_source_repo "$source_dir"
+      fi
       if [[ "$mode" == sandbox || "$mode" == dry-run ]]; then
         run git clone --filter=blob:none --branch main --single-branch "$source_url" "$state_dir/source"
-      elif [[ -d "$state_dir/source/.git" ]]; then
-        git -C "$state_dir/source" fetch --filter=blob:none origin main
-        git -C "$state_dir/source" checkout --detach origin/main
       else
-        tmp_source="$state_dir/.source.tmp"
-        rm -rf "$tmp_source"
-        git clone --filter=blob:none --branch main --single-branch "$source_url" "$tmp_source"
-        git -C "$tmp_source" checkout --detach origin/main
-        mv "$tmp_source" "$state_dir/source"
+        if [[ -e "$source_dir" || -L "$source_dir" ]]; then
+          git -C "$source_dir" fetch --filter=blob:none origin main
+          git -C "$source_dir" checkout --detach origin/main
+        else
+          tmp_source="$state_dir/.source.tmp"
+          if [[ -e "$tmp_source" || -L "$tmp_source" ]]; then
+            validate_source_repo "$tmp_source"
+          else
+            git clone --filter=blob:none --branch main --single-branch "$source_url" "$tmp_source"
+          fi
+          git -C "$tmp_source" fetch --filter=blob:none origin main
+          git -C "$tmp_source" checkout --detach origin/main
+          mv "$tmp_source" "$source_dir"
+        fi
       fi
       ;;
     chezmoi-preview)
